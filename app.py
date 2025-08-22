@@ -1,184 +1,114 @@
-ahmedabad_gandhinagar_neighbourhood_pro_tool.py
-Enhanced neighborhood analysis tool with additional features
-import loggingimport jsonimport re
-Configure basic logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-def sanitize_input(text):    """    Sanitize input by removing extra whitespace and special characters.
-Args:
-    text (str): Input string to sanitize
+import json
+import pandas as pd
+import streamlit as st
+import plotly.graph_objects as go
+from deepseek_client import build_prompt, call_deepseek
+import io
 
-Returns:
-    str: Sanitized string
-"""
-if not isinstance(text, str):
-    return ""
-# Remove special characters, keep alphanumeric and spaces
-text = re.sub(r'[^a-zA-Z0-9\s]', '', text)
-# Remove extra whitespace
-return ' '.join(text.strip().split())
+# Enhanced neighborhood analysis tool with additional features
 
-def get_neighborhood_info(city, neighborhood):    """    Retrieve neighborhood information for Ahmedabad or Gandhinagar with case-insensitive matching.
-Args:
-    city (str): Name of the city (e.g., 'Ahmedabad', 'Gandhinagar')
-    neighborhood (str): Name of the neighborhood
+st.set_page_config(page_title="Ahmedabad-Gandhinagar Neighbourhood PRO", page_icon="🏙️", layout="wide")
 
-Returns:
-    dict: Detailed information about the neighborhood or error message
-"""
-# Input validation
-if not isinstance(city, str) or not isinstance(neighborhood, str):
-    logging.error("Invalid input: city and neighborhood must be strings")
-    return {'error': 'Invalid input: city and neighborhood must be strings'}
+def extract_dist(row, key):
+    d = row.get(key, {})
+    return d.get("distance_km") if isinstance(d, dict) else None
 
-city = sanitize_input(city)
-neighborhood = sanitize_input(neighborhood)
+@st.cache_data
+def load_data():
+    with open("neighbourhood_data.json", "r", encoding="utf-8") as f:
+        data = json.load(f)
+    df = pd.DataFrame(data)
+    max_sum = (df["schools"] + df["hospitals"]).max()
+    df["edu_health_rating"] = ((df["schools"] + df["hospitals"]) / max_sum * 10).round(1)
+    growth_map = {"High": 10, "Medium": 6.5, "Low": 3}
+    df["growth_score"] = df["future_growth"].map(growth_map).fillna(5)
+    max_p = df["avg_price_per_sqft"].max()
+    min_p = df["avg_price_per_sqft"].min()
+    rng = max(1, max_p - min_p)
+    df["price_afford_score"] = ((max_p - df["avg_price_per_sqft"]) / rng * 10).round(2)
+    df["airport_km"] = df.apply(lambda r: extract_dist(r, "nearest_airport"), axis=1)
+    df["metro_km"] = df.apply(lambda r: extract_dist(r, "metro") if r.get("metro", {}).get("available", False) else None, axis=1)
+    return df
 
-if not city or not neighborhood:
-    logging.error("Empty input after sanitization")
-    return {'error': 'City or neighborhood cannot be empty'}
+df = load_data()
+st.title("Ahmedabad–Gandhinagar Neighbourhood Intelligence PRO Tool")
 
-# Sample data; replace with actual data source (e.g., API or database)
-neighborhoods = {
-    'ahmedabad': [
-        {'name': 'Navrangpura', 'population': 50000, 'area_sqkm': 5.2},
-        {'name': 'Vastrapur', 'population': 45000, 'area_sqkm': 4.8},
-        {'name': 'Maninagar', 'population': 60000, 'area_sqkm': 6.0}
-    ],
-    'gandhinagar': [
-        {'name': 'Sector 21', 'population': 20000, 'area_sqkm': 3.5},
-        {'name': 'Sector 7', 'population': 18000, 'area_sqkm': 3.0},
-        {'name': 'Kudasan', 'population': 25000, 'area_sqkm': 4.0}
-    ]
-}
+# --- COMPARISON UI --- #
+st.header("1️⃣ Area-wise Connectivity Comparison")
+comp_chart_df = df[["location", "airport_km", "metro_km"]]
 
-try:
-    # Convert inputs to lowercase for case-insensitive matching
-    city = city.lower()
-    neighborhood = neighborhood.lower()
+fig = go.Figure([
+    go.Bar(name='Airport (km)', x=comp_chart_df["location"], y=comp_chart_df["airport_km"]),
+    go.Bar(name='Metro (km)', x=comp_chart_df["location"], y=comp_chart_df["metro_km"])
+])
+fig.update_layout(barmode='group', xaxis_tickangle=-45, title="Distance from Airport & Metro", height=600)
+st.plotly_chart(fig, use_container_width=True)
 
-    if city not in neighborhoods:
-        logging.error(f"City {city} not found")
-        return {'error': f'City {city} not found'}
+# --- FULL TABLE and EXPORT --- #
+st.header("2️⃣ Compare All Areas (Data Table & Export)")
+comp_table = df[["location", "safety_score", "edu_health_rating", "traffic_score", "future_growth", "avg_price_per_sqft", "airport_km", "metro_km"]]
+st.dataframe(comp_table, use_container_width=True)
 
-    # Find the neighborhood in the city's list
-    for nb in neighborhoods[city]:
-        if nb['name'].lower() == neighborhood:
-            population_density = nb['population'] / nb['area_sqkm'] if nb['area_sqkm'] > 0 else 0
-            logging.info(f"Retrieved data for {nb['name']} in {city}")
-            return {
-                'city': city.capitalize(),
-                'neighborhood': nb['name'],
-                'population': nb['population'],
-                'area_sqkm': nb['area_sqkm'],
-                'population_density': round(population_density, 2),
-                'info': f'Data for {nb["name"]} in {city.capitalize()}'
-            }
+excel_buff = io.BytesIO()
+with pd.ExcelWriter(excel_buff, engine='xlsxwriter') as writer:
+    comp_table.to_excel(writer, index=False, sheet_name='Areas')
+st.download_button(
+    label="⬇️ Download All Area Comparison (Excel)",
+    data=excel_buff.getvalue(),
+    file_name="all_area_comparison.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
 
-    logging.error(f"Neighborhood {neighborhood} not found in {city}")
-    return {'error': f'Neighborhood {neighborhood} not found in {city}'}
+# --- RADAR CHART MULTIAREA --- #
+st.header("3️⃣ Multi-Area Radar Chart")
+radar_choices = st.multiselect("Select up to 5 localities:", df["location"], default=df["location"].tolist()[:3])
+if len(radar_choices) >= 2:
+    radar_df = df[df["location"].isin(radar_choices)].set_index("location")[["safety_score", "edu_health_rating", "traffic_score", "airport_km", "metro_km"]]
+    fig2 = go.Figure()
+    for area in radar_df.index:
+        vals = radar_df.loc[area].tolist()
+        fig2.add_trace(go.Scatterpolar(r=vals + [vals[0]], theta=radar_df.columns.tolist() + [radar_df.columns], fill='toself', name=area))
+    fig2.update_layout(title="Side-by-side Locality Radar Comparison", polar=dict(radialaxis=dict(visible=True)))
+    st.plotly_chart(fig2, use_container_width=True)
 
-except Exception as e:
-    logging.error(f"Error accessing data: {str(e)}")
-    return {'error': f'Internal error: {str(e)}'}
+# --- AI PRO BEST BUY REPORT (DeepSeek) --- #
+st.header("4️⃣ PRO Best-Buy AI Analysis & Download")
+if st.button("Generate PRO Best-Buy Report (AI)"):
+    prompt = "You are a senior real estate consultant. Given this Ahmedabad and Gandhinagar area table:\n"
+    for i, row in comp_table.iterrows():
+        prompt += f"- {row['location']}: Safety={row['safety_score']}, Edu/Health={row['edu_health_rating']}, Traffic={row['traffic_score']}, Price={row['avg_price_per_sqft']}, Airport={row['airport_km']}km, Metro={row['metro_km']}km, Growth={row['future_growth']}\n"
+    prompt += "\nWrite a PRO-level short-list of the 3 best areas for a buyer seeking balance, plus a concise summary table as markdown, and a crisp tip for investors vs families."
+    try:
+        ai_report = call_deepseek(prompt)
+        st.markdown(ai_report)
+        st.download_button(
+            label="⬇️ Download PRO AI Report (Markdown)",
+            data=ai_report.encode('utf-8'),
+            file_name="best_buy_ai_report.md",
+            mime="text/markdown"
+        )
+    except Exception as e:
+        st.error(f"AI Report failed: {e}")
 
-def list_neighborhoods(city):    """    List all neighborhoods for a given city.
-Args:
-    city (str): Name of the city (e.g., 'Ahmedabad', 'Gandhinagar')
-
-Returns:
-    dict: List of neighborhoods or error message
-"""
-city = sanitize_input(city)
-if not city:
-    logging.error("Empty city input after sanitization")
-    return {'error': 'City cannot be empty'}
-
-neighborhoods = {
-    'ahmedabad': [
-        {'name': 'Navrangpura', 'population': 50000, 'area_sqkm': 5.2},
-        {'name': 'Vastrapur', 'population': 45000, 'area_sqkm': 4.8},
-        {'name': 'Maninagar', 'population': 60000, 'area_sqkm': 6.0}
-    ],
-    'gandhinagar': [
-        {'name': 'Sector 21', 'population': 20000, 'area_sqkm': 3.5},
-        {'name': 'Sector 7', 'population': 18000, 'area_sqkm': 3.0},
-        {'name': 'Kudasan', 'population': 25000, 'area_sqkm': 4.0}
-    ]
-}
-
-try:
-    city = city.lower()
-    if city not in neighborhoods:
-        logging.error(f"City {city} not found")
-        return {'error': f'City {city} not found'}
-
-    return {
-        'city': city.capitalize(),
-        'neighborhoods': [nb['name'] for nb in neighborhoods[city]]
+# --- INDIVIDUAL AREA DEEPSEEK (OPTIONAL) --- #
+st.header("5️⃣ Individual Locality AI Report (DeepSeek)")
+selected = st.selectbox("Choose area:", df["location"].tolist(), index=0)
+loc_row = df[df["location"] == selected].iloc[0].to_dict()
+if st.button("AI Scorecard This Area"):
+    loc_payload = {
+        "location": loc_row["location"],
+        "safety_score": int(loc_row["safety_score"]),
+        "traffic_score": int(loc_row["traffic_score"]),
+        "schools": int(loc_row["schools"]),
+        "hospitals": int(loc_row["hospitals"]),
+        "future_growth": loc_row["future_growth"],
+        "avg_price_per_sqft": int(loc_row["avg_price_per_sqft"]),
     }
+    prompt = build_prompt(loc_payload)
+    try:
+        report = call_deepseek(prompt)
+        st.markdown(report)
+    except Exception as e:
+        st.error(f"DeepSeek call failed: {e}")
 
-except Exception as e:
-    logging.error(f"Error listing neighborhoods: {str(e)}")
-    return {'error': f'Internal error: {str(e)}'}
-
-def export_neighborhood_data(city, filename='neighborhood_data.json'):    """    Export neighborhood data for a city to a JSON file.
-Args:
-    city (str): Name of the city
-    filename (str): Name of the output JSON file
-
-Returns:
-    dict: Success or error message
-"""
-city = sanitize_input(city)
-if not city:
-    logging.error("Empty city input after sanitization")
-    return {'error': 'City cannot be empty'}
-
-neighborhoods = {
-    'ahmedabad': [
-        {'name': 'Navrangpura', 'population': 50000, 'area_sqkm': 5.2},
-        {'name': 'Vastrapur', 'population': 45000, 'area_sqkm': 4.8},
-        {'name': 'Maninagar', 'population': 60000, 'area_sqkm': 6.0}
-    ],
-    'gandhinagar': [
-        {'name': 'Sector 21', 'population': 20000, 'area_sqkm': 3.5},
-        {'name': 'Sector 7', 'population': 18000, 'area_sqkm': 3.0},
-        {'name': 'Kudasan', 'population': 25000, 'area_sqkm': 4.0}
-    ]
-}
-
-try:
-    city = city.lower()
-    if city not in neighborhoods:
-        logging.error(f"City {city} not found")
-        return {'error': f'City {city} not found'}
-
-    # Calculate population density for each neighborhood
-    data = [
-        {
-            'name': nb['name'],
-            'population': nb['population'],
-            'area_sqkm': nb['area_sqkm'],
-            'population_density': round(nb['population'] / nb['area_sqkm'], 2) if nb['area_sqkm'] > 0 else 0
-        }
-        for nb in neighborhoods[city]
-    ]
-
-    with open(filename, 'w') as f:
-        json.dump({'city': city.capitalize(), 'neighborhoods': data}, f, indent=4)
-    logging.info(f"Data exported to {filename}")
-    return {'success': f'Data exported to {filename}'}
-
-except Exception as e:
-    logging.error(f"Error exporting data: {str(e)}")
-    return {'error': f'Failed to export data: {str(e)}'}
-
-Example usage
-if name == 'main':    # Get info for a specific neighborhood    result1 = get_neighborhood_info('Ahmedabad  ', ' Navrangpura! ')    print("Neighborhood Info:", result1)
-# List all neighborhoods in a city
-result2 = list_neighborhoods('Gandhinagar')
-print("Neighborhood List:", result2)
-
-# Export data to JSON
-result3 = export_neighborhood_data('Ahmedabad')
-print("Export Result:", result3)
+st.info("This PRO app lets you compare all localities on transit, price and AI analysis. Download summary Excel or AI report easily. Hosted 100% in the cloud for you.")
