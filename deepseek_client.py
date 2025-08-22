@@ -1,4 +1,3 @@
-import json
 import requests
 
 def build_prompt(location_info):
@@ -28,11 +27,3 @@ def call_deepseek(prompt, api_key="sk-54bd3323c4d14bf08b941f0bff7a47d5"):
     response = requests.post(url, headers=headers, json=payload)
     response.raise_for_status()
     return response.json()['choices'][0]['message']['content']
-
-# Example usage (remove or comment out before running on Streamlit!):
-# with open('neighbourhood_data.json', 'r', encoding='utf-8') as f:
-#     data = json.load(f)
-# user_location = "Satellite, Ahmedabad"
-# location_info = next((loc for loc in data if loc['location'].lower() == user_location.lower()), None)
-# prompt = build_prompt(location_info)
-# print(call_deepseek(prompt))
