@@ -1,278 +1,322 @@
-import logging
-import json
-import re
-import os
-from dotenv import load_dotenv
-import requests
-
-# Configure basic logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
-# Load environment variables
-load_dotenv()
-DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
-DEEPSEEK_URL = "https://api.deepseek.com/chat/completions"
-MODEL_NAME = "deepseek-chat"
-
-# Extended neighborhood data with new attributes
-NEIGHBORHOODS = {
-    'ahmedabad': [
-        {
-            'name': "Satellite",
-            'population': None,  # Population data not provided
-            'area_sqkm': None,
-            'safety_score': 8,
-            'traffic_score': 6,
-            'schools': 10,
-            'hospitals': 5,
-            'future_growth': "High",
-            'avg_price_per_sqft': 6500,
-            'nearest_airport': {"name": "Sardar Vallabhbhai Patel International Airport (AMD)", "distance_km": 15.2},
-            'nearest_railway': {"name": "Ahmedabad Junction (ADI)", "distance_km": 9.8},
-            'metro': {"available": True, "station": "Shyamal Cross Road", "distance_km": 2.3},
-            'police_station': {"name": "Satellite Police Station", "distance_km": 1.4}
-        },
-        {
-            'name': "Vastrapur",
-            'population': None,
-            'area_sqkm': None,
-            'safety_score': 9,
-            'traffic_score': 7,
-            'schools': 12,
-            'hospitals': 6,
-            'future_growth': "High",
-            'avg_price_per_sqft': 7000,
-            'nearest_airport': {"name": "Sardar Vallabhbhai Patel International Airport (AMD)", "distance_km": 14.1},
-            'nearest_railway': {"name": "Vastrapur Railway Station", "distance_km": 1.7},
-            'metro': {"available": True, "station": "Vastrapur", "distance_km": 0.5},
-            'police_station': {"name": "Vastrapur Police Station", "distance_km": 0.7}
-        },
-        # Add other neighborhoods similarly...
-    ]
-}
-
-def sanitize_input(text):
-    """
-    Sanitize input by removing extra whitespace and special characters.
-    Convert to lowercase for consistency.
-    
-    Args:
-        text (str): Input string to sanitize
-    
-    Returns:
-        str: Sanitized and lowercase string
-    """
-    if not isinstance(text, str):
-        return ""
-    text = re.sub(r'[^a-zA-Z0-9\s]', '', text)
-    return ' '.join(text.strip().split()).lower()
-
-def get_neighborhood_info(city, neighborhood):
-    """
-    Retrieve neighborhood information with case-insensitive matching.
-    
-    Args:
-        city (str): Name of the city (currently only 'ahmedabad' supported)
-        neighborhood (str): Name of the neighborhood
-    
-    Returns:
-        dict: Detailed information about the neighborhood or error message
-    """
-    if not isinstance(city, str) or not isinstance(neighborhood, str):
-        logging.error("Invalid input: city and neighborhood must be strings")
-        return {'error': 'Invalid input: city and neighborhood must be strings'}
-
-    city = sanitize_input(city)
-    neighborhood = sanitize_input(neighborhood)
-    
-    if not city or not neighborhood:
-        logging.error("Empty input after sanitization")
-        return {'error': 'City or neighborhood cannot be empty'}
-
-    try:
-        if city not in NEIGHBORHOODS:
-            logging.error(f"City {city} not found")
-            return {'error': f'City {city} not found'}
-
-        for nb in NEIGHBORHOODS[city]:
-            if nb['name'].lower() == neighborhood:
-                population_density = None
-                if nb.get('population') and nb.get('area_sqkm'):
-                    population_density = round(nb['population'] / nb['area_sqkm'], 2)
-                logging.info(f"Retrieved data for {nb['name']} in {city}")
-                return {
-                    'city': city.capitalize(),
-                    **nb,
-                    'population_density': population_density,
-                    'info': f'Data for {nb["name"]} in {city.capitalize()}'
-                }
-        
-        logging.error(f"Neighborhood {neighborhood} not found in {city}")
-        return {'error': f'Neighborhood {neighborhood} not found in {city}'}
-    except Exception as e:
-        logging.error(f"Error accessing data: {str(e)}")
-        return {'error': f'Internal error: {str(e)}'}
-
-def list_neighborhoods(city):
-    """
-    List all neighborhoods for a given city.
-    
-    Args:
-        city (str): Name of the city
-    
-    Returns:
-        dict: List of neighborhoods or error message
-    """
-    city = sanitize_input(city)
-    if not city:
-        logging.error("Empty city input after sanitization")
-        return {'error': 'City cannot be empty'}
-
-    try:
-        if city not in NEIGHBORHOODS:
-            logging.error(f"City {city} not found")
-            return {'error': f'City {city} not found'}
-        
-        return {
-            'city': city.capitalize(),
-            'neighborhoods': [nb['name'] for nb in NEIGHBORHOODS[city]]
-        }
-    except Exception as e:
-        logging.error(f"Error listing neighborhoods: {str(e)}")
-        return {'error': f'Internal error: {str(e)}'}
-
-def export_neighborhood_data(city, filename='neighborhood_data.json'):
-    """
-    Export neighborhood data for a city to a JSON file.
-    
-    Args:
-        city (str): Name of the city
-        filename (str): Name of the output JSON file
-    
-    Returns:
-        dict: Success or error message
-    """
-    city = sanitize_input(city)
-    if not city:
-        logging.error("Empty city input after sanitization")
-        return {'error': 'City cannot be empty'}
-
-    try:
-        if city not in NEIGHBORHOODS:
-            logging.error(f"City {city} not found")
-            return {'error': f'City {city} not found'}
-
-        data = []
-        for nb in NEIGHBORHOODS[city]:
-            population_density = None
-            if nb.get('population') and nb.get('area_sqkm'):
-                population_density = round(nb['population'] / nb['area_sqkm'], 2)
-            record = {
-                'name': nb['name'],
-                'population': nb.get('population'),
-                'area_sqkm': nb.get('area_sqkm'),
-                'population_density': population_density,
-                'safety_score': nb['safety_score'],
-                'traffic_score': nb['traffic_score'],
-                'schools': nb['schools'],
-                'hospitals': nb['hospitals'],
-                'future_growth': nb['future_growth'],
-                'avg_price_per_sqft': nb['avg_price_per_sqft'],
-                'nearest_airport': nb.get('nearest_airport'),
-                'nearest_railway': nb.get('nearest_railway'),
-                'metro': nb.get('metro'),
-                'police_station': nb.get('police_station')
-            }
-            data.append(record)
-
-        with open(filename, 'w') as f:
-            json.dump({'city': city.capitalize(), 'neighborhoods': data}, f, indent=4)
-        
-        logging.info(f"Data exported to {filename}")
-        return {'success': f'Data exported to {filename}'}
-    except Exception as e:
-        logging.error(f"Error exporting data: {str(e)}")
-        return {'error': f'Failed to export data: {str(e)}'}
-
-def build_prompt(location_info):
-    """
-    Build a prompt for DeepSeek API to generate a neighborhood scorecard with detailed amenities.
-    
-    Args:
-        location_info (dict): Dictionary with neighborhood data
-    
-    Returns:
-        str: Formatted prompt string for API consumption
-    """
-    required_keys = ['name', 'safety_score', 'traffic_score', 'schools', 'hospitals', 'future_growth', 'avg_price_per_sqft']
-    for key in required_keys:
-        if key not in location_info:
-            logging.error(f"Missing key in location_info: {key}")
-            raise ValueError(f"Missing key in location_info: {key}")
-
-    prompt = (
-        f"Generate a detailed neighborhood scorecard for {location_info['name']}:\n"
-        f"- Safety Score: {location_info['safety_score']} (out of 10)\n"
-        f"- Traffic Score: {location_info['traffic_score']} (out of 10)\n"
-        f"- Number of Schools: {location_info['schools']}\n"
-        f"- Number of Hospitals: {location_info['hospitals']}\n"
-        f"- Future Growth Potential: {location_info['future_growth']}\n"
-        f"- Average Price per Square Foot: ₹{location_info['avg_price_per_sqft']}\n"
-    )
-    
-    if location_info.get('nearest_airport'):
-        airport = location_info['nearest_airport']
-        prompt += f"- Nearest Airport: {airport['name']} ({airport['distance_km']} km away)\n"
-    if location_info.get('nearest_railway'):
-        railway = location_info['nearest_railway']
-        prompt += f"- Nearest Railway Station: {railway['name']} ({railway['distance_km']} km away)\n"
-    if location_info.get('metro') and location_info['metro'].get('available'):
-        metro = location_info['metro']
-        prompt += f"- Metro Station: {metro['station']} ({metro['distance_km']} km away)\n"
-    if location_info.get('police_station'):
-        police = location_info['police_station']
-        prompt += f"- Nearby Police Station: {police['name']} ({police['distance_km']} km away)\n"
-    
-    prompt += "Please provide actionable insights and a summary."
-    return prompt
-
-def get_deepseek_scorecard(location_info):
-    """
-    Call DeepSeek API with neighborhood data prompt and get the generated scorecard.
-    
-    Args:
-        location_info (dict): Dictionary with neighborhood data
-    
-    Returns:
-        dict: API response with generated scorecard or error
-    """
-    if not DEEPSEEK_API_KEY:
-        logging.error("DeepSeek API key not found in environment variables")
-        return {'error': 'DeepSeek API key missing'}
-    
-    prompt = build_prompt(location_info)
-    headers = {
-        "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
-        "Content-Type": "application/json"
+[
+  {
+    "location": "Satellite, Ahmedabad",
+    "city": "Ahmedabad",
+    "area": "Satellite",
+    "coordinates": {"lat": 23.0261, "lng": 72.5263},
+    "population": 78000,
+    "area_sqkm": 8.5,
+    "population_density": 9176,
+    "safety_score": 8.2,
+    "traffic_score": 6.8,
+    "schools": 15,
+    "hospitals": 8,
+    "future_growth": "High",
+    "avg_price_per_sqft": 6500,
+    "rental_yield": 3.2,
+    "appreciation_rate": 8.5,
+    "connectivity_score": 9.1,
+    "infrastructure_score": 8.7,
+    "lifestyle_score": 8.9,
+    "environment_score": 7.2,
+    "investment_score": 8.4,
+    "nearest_airport": {"name": "Sardar Vallabhbhai Patel International Airport", "distance_km": 15.2},
+    "nearest_railway": {"name": "Ahmedabad Junction", "distance_km": 9.8},
+    "metro": {"available": true, "station": "Shyamal Cross Road", "distance_km": 2.3},
+    "police_station": {"name": "Satellite Police Station", "distance_km": 1.4},
+    "amenities": {
+      "malls": ["Himalaya Mall", "Acropolis Mall"],
+      "restaurants": 120,
+      "banks": 25,
+      "atms": 45,
+      "parks": ["Kankaria Lake", "Law Garden"],
+      "gyms": 18,
+      "cinemas": 4
+    },
+    "public_transport": {
+      "bus_routes": 15,
+      "auto_availability": "High",
+      "uber_ola": "Excellent"
     }
-    
-    data = {
-        "model": MODEL_NAME,
-        "messages": [
-            {"role": "user", "content": prompt}
-        ]
+  },
+  {
+    "location": "Vastrapur, Ahmedabad",
+    "city": "Ahmedabad",
+    "area": "Vastrapur",
+    "coordinates": {"lat": 23.0395, "lng": 72.5240},
+    "population": 65000,
+    "area_sqkm": 7.2,
+    "population_density": 9028,
+    "safety_score": 9.1,
+    "traffic_score": 7.2,
+    "schools": 20,
+    "hospitals": 12,
+    "future_growth": "High",
+    "avg_price_per_sqft": 7000,
+    "rental_yield": 3.5,
+    "appreciation_rate": 9.2,
+    "connectivity_score": 9.5,
+    "infrastructure_score": 9.2,
+    "lifestyle_score": 9.4,
+    "environment_score": 8.1,
+    "investment_score": 9.0,
+    "nearest_airport": {"name": "Sardar Vallabhbhai Patel International Airport", "distance_km": 14.1},
+    "nearest_railway": {"name": "Vastrapur Railway Station", "distance_km": 1.7},
+    "metro": {"available": true, "station": "Vastrapur", "distance_km": 0.5},
+    "police_station": {"name": "Vastrapur Police Station", "distance_km": 0.7},
+    "amenities": {
+      "malls": ["Alpha One Mall", "Westside"],
+      "restaurants": 95,
+      "banks": 22,
+      "atms": 38,
+      "parks": ["Vastrapur Lake", "Gujarat University Ground"],
+      "gyms": 15,
+      "cinemas": 3
+    },
+    "public_transport": {
+      "bus_routes": 12,
+      "auto_availability": "High",
+      "uber_ola": "Excellent"
     }
-    
-    try:
-        response = requests.post(DEEPSEEK_URL, headers=headers, json=data)
-        response.raise_for_status()
-        result_json = response.json()
-        if 'choices' in result_json and len(result_json['choices']) > 0:
-            content = result_json['choices'][0]['message']['content']
-            return {'scorecard': content}
-        else:
-            logging.error("Unexpected response structure from DeepSeek API")
-            return {'error': 'Unexpected response format from DeepSeek API'}
-    except requests.exceptions.RequestException as e:
-        logging.error(f"DeepSeek API request failed: {str(e)}")
-        return {'error': f'DeepSeek API request failed: {str(e)}'}
+  },
+  {
+    "location": "Bodakdev, Ahmedabad",
+    "city": "Ahmedabad",
+    "area": "Bodakdev",
+    "coordinates": {"lat": 23.0543, "lng": 72.5144},
+    "population": 55000,
+    "area_sqkm": 6.8,
+    "population_density": 8088,
+    "safety_score": 9.3,
+    "traffic_score": 7.8,
+    "schools": 18,
+    "hospitals": 10,
+    "future_growth": "High",
+    "avg_price_per_sqft": 8200,
+    "rental_yield": 3.8,
+    "appreciation_rate": 10.1,
+    "connectivity_score": 8.9,
+    "infrastructure_score": 9.5,
+    "lifestyle_score": 9.6,
+    "environment_score": 8.7,
+    "investment_score": 9.2,
+    "nearest_airport": {"name": "Sardar Vallabhbhai Patel International Airport", "distance_km": 12.5},
+    "nearest_railway": {"name": "Sabarmati Junction", "distance_km": 8.2},
+    "metro": {"available": true, "station": "Thaltej", "distance_km": 1.8},
+    "police_station": {"name": "Bodakdev Police Station", "distance_km": 0.9},
+    "amenities": {
+      "malls": ["Palladium Mall", "Iscon Mega Mall"],
+      "restaurants": 85,
+      "banks": 20,
+      "atms": 35,
+      "parks": ["Thaltej Garden", "Iscon Temple Ground"],
+      "gyms": 12,
+      "cinemas": 2
+    },
+    "public_transport": {
+      "bus_routes": 10,
+      "auto_availability": "Medium",
+      "uber_ola": "Excellent"
+    }
+  },
+  {
+    "location": "Prahlad Nagar, Ahmedabad",
+    "city": "Ahmedabad",
+    "area": "Prahlad Nagar",
+    "coordinates": {"lat": 23.0268, "lng": 72.4989},
+    "population": 42000,
+    "area_sqkm": 5.5,
+    "population_density": 7636,
+    "safety_score": 8.8,
+    "traffic_score": 6.5,
+    "schools": 14,
+    "hospitals": 7,
+    "future_growth": "High",
+    "avg_price_per_sqft": 7800,
+    "rental_yield": 3.4,
+    "appreciation_rate": 8.9,
+    "connectivity_score": 8.7,
+    "infrastructure_score": 8.9,
+    "lifestyle_score": 8.8,
+    "environment_score": 7.9,
+    "investment_score": 8.6,
+    "nearest_airport": {"name": "Sardar Vallabhbhai Patel International Airport", "distance_km": 16.3},
+    "nearest_railway": {"name": "Sabarmati Junction", "distance_km": 10.1},
+    "metro": {"available": true, "station": "Prahlad Nagar", "distance_km": 0.8},
+    "police_station": {"name": "Prahlad Nagar Police Station", "distance_km": 1.2},
+    "amenities": {
+      "malls": ["Shopper's Plaza", "Gulmohar Park Mall"],
+      "restaurants": 70,
+      "banks": 18,
+      "atms": 30,
+      "parks": ["Prahlad Nagar Garden", "Gulmohar Park"],
+      "gyms": 10,
+      "cinemas": 2
+    },
+    "public_transport": {
+      "bus_routes": 8,
+      "auto_availability": "Medium",
+      "uber_ola": "Good"
+    }
+  },
+  {
+    "location": "Navrangpura, Ahmedabad",
+    "city": "Ahmedabad",
+    "area": "Navrangpura",
+    "coordinates": {"lat": 23.0368, "lng": 72.5558},
+    "population": 72000,
+    "area_sqkm": 9.2,
+    "population_density": 7826,
+    "safety_score": 8.5,
+    "traffic_score": 8.2,
+    "schools": 25,
+    "hospitals": 15,
+    "future_growth": "Medium",
+    "avg_price_per_sqft": 7500,
+    "rental_yield": 3.6,
+    "appreciation_rate": 7.8,
+    "connectivity_score": 9.3,
+    "infrastructure_score": 8.8,
+    "lifestyle_score": 8.6,
+    "environment_score": 7.4,
+    "investment_score": 8.2,
+    "nearest_airport": {"name": "Sardar Vallabhbhai Patel International Airport", "distance_km": 18.5},
+    "nearest_railway": {"name": "Ahmedabad Junction", "distance_km": 4.2},
+    "metro": {"available": true, "station": "Gujarat University", "distance_km": 1.5},
+    "police_station": {"name": "Navrangpura Police Station", "distance_km": 0.8},
+    "amenities": {
+      "malls": ["City Gold", "Crossword Book Store"],
+      "restaurants": 150,
+      "banks": 30,
+      "atms": 50,
+      "parks": ["Gujarat University Campus", "Navrangpura Garden"],
+      "gyms": 20,
+      "cinemas": 3
+    },
+    "public_transport": {
+      "bus_routes": 20,
+      "auto_availability": "High",
+      "uber_ola": "Excellent"
+    }
+  },
+  {
+    "location": "Sector 21, Gandhinagar",
+    "city": "Gandhinagar",
+    "area": "Sector 21",
+    "coordinates": {"lat": 23.2156, "lng": 72.6369},
+    "population": 25000,
+    "area_sqkm": 4.2,
+    "population_density": 5952,
+    "safety_score": 9.5,
+    "traffic_score": 3.8,
+    "schools": 8,
+    "hospitals": 5,
+    "future_growth": "High",
+    "avg_price_per_sqft": 6000,
+    "rental_yield": 4.2,
+    "appreciation_rate": 11.5,
+    "connectivity_score": 7.8,
+    "infrastructure_score": 9.8,
+    "lifestyle_score": 8.9,
+    "environment_score": 9.5,
+    "investment_score": 8.9,
+    "nearest_airport": {"name": "Sardar Vallabhbhai Patel International Airport", "distance_km": 28.5},
+    "nearest_railway": {"name": "Gandhinagar Capital Railway Station", "distance_km": 2.1},
+    "metro": {"available": false, "station": null, "distance_km": null},
+    "police_station": {"name": "Sector 21 Police Station", "distance_km": 0.5},
+    "amenities": {
+      "malls": ["Palladium Mall Gandhinagar", "Reliance Trends"],
+      "restaurants": 45,
+      "banks": 12,
+      "atms": 20,
+      "parks": ["Central Park", "Sarita Udyan"],
+      "gyms": 8,
+      "cinemas": 1
+    },
+    "public_transport": {
+      "bus_routes": 6,
+      "auto_availability": "Medium",
+      "uber_ola": "Good"
+    }
+  },
+  {
+    "location": "Sector 7, Gandhinagar",
+    "city": "Gandhinagar",
+    "area": "Sector 7",
+    "coordinates": {"lat": 23.2244, "lng": 72.6503},
+    "population": 22000,
+    "area_sqkm": 3.8,
+    "population_density": 5789,
+    "safety_score": 9.2,
+    "traffic_score": 3.2,
+    "schools": 6,
+    "hospitals": 4,
+    "future_growth": "Medium",
+    "avg_price_per_sqft": 5800,
+    "rental_yield": 4.0,
+    "appreciation_rate": 9.8,
+    "connectivity_score": 7.5,
+    "infrastructure_score": 9.5,
+    "lifestyle_score": 8.4,
+    "environment_score": 9.2,
+    "investment_score": 8.4,
+    "nearest_airport": {"name": "Sardar Vallabhbhai Patel International Airport", "distance_km": 30.2},
+    "nearest_railway": {"name": "Gandhinagar Capital Railway Station", "distance_km": 3.5},
+    "metro": {"available": false, "station": null, "distance_km": null},
+    "police_station": {"name": "Sector 7 Police Station", "distance_km": 0.6},
+    "amenities": {
+      "malls": ["Acropolis Mall", "Shoppers Stop"],
+      "restaurants": 35,
+      "banks": 10,
+      "atms": 15,
+      "parks": ["Sector 7 Garden", "Children's Park"],
+      "gyms": 6,
+      "cinemas": 1
+    },
+    "public_transport": {
+      "bus_routes": 5,
+      "auto_availability": "Medium",
+      "uber_ola": "Good"
+    }
+  },
+  {
+    "location": "Kudasan, Gandhinagar",
+    "city": "Gandhinagar",
+    "area": "Kudasan",
+    "coordinates": {"lat": 23.1389, "lng": 72.6181},
+    "population": 35000,
+    "area_sqkm": 5.2,
+    "population_density": 6731,
+    "safety_score": 8.8,
+    "traffic_score": 4.5,
+    "schools": 10,
+    "hospitals": 6,
+    "future_growth": "High",
+    "avg_price_per_sqft": 6200,
+    "rental_yield": 3.9,
+    "appreciation_rate": 10.8,
+    "connectivity_score": 8.2,
+    "infrastructure_score": 8.9,
+    "lifestyle_score": 8.1,
+    "environment_score": 8.8,
+    "investment_score": 8.7,
+    "nearest_airport": {"name": "Sardar Vallabhbhai Patel International Airport", "distance_km": 25.8},
+    "nearest_railway": {"name": "Khodiyar Railway Station", "distance_km": 4.2},
+    "metro": {"available": false, "station": null, "distance_km": null},
+    "police_station": {"name": "Kudasan Police Station", "distance_km": 1.1},
+    "amenities": {
+      "malls": ["Kudasan Mall", "Big Bazaar"],
+      "restaurants": 55,
+      "banks": 15,
+      "atms": 25,
+      "parks": ["Kudasan Lake", "Green Valley Park"],
+      "gyms": 10,
+      "cinemas": 2
+    },
+    "public_transport": {
+      "bus_routes": 8,
+      "auto_availability": "High",
+      "uber_ola": "Good"
+    }
+  }
+]
