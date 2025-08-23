@@ -1,62 +1,86 @@
-{
-  "city": "Ahmedabad",
-  "neighborhoods": [
-    {
-      "name": "Satellite",
-      "population": null,
-      "area_sqkm": null,
-      "safety_score": 8,
-      "traffic_score": 6,
-      "schools": 10,
-      "hospitals": 5,
-      "future_growth": "High",
-      "avg_price_per_sqft": 6500,
-      "nearest_airport": {
-        "name": "Sardar Vallabhbhai Patel International Airport (AMD)",
-        "distance_km": 15.2
-      },
-      "nearest_railway": {
-        "name": "Ahmedabad Junction (ADI)",
-        "distance_km": 9.8
-      },
-      "metro": {
-        "available": true,
-        "station": "Shyamal Cross Road",
-        "distance_km": 2.3
-      },
-      "police_station": {
-        "name": "Satellite Police Station",
-        "distance_km": 1.4
-      }
+[
+  {
+    "location": "Satellite",
+    "population": null,
+    "area_sqkm": null,
+    "safety_score": 8,
+    "traffic_score": 6,
+    "schools": 10,
+    "hospitals": 5,
+    "future_growth": "High",
+    "avg_price_per_sqft": 6500,
+    "nearest_airport": {
+      "name": "Sardar Vallabhbhai Patel International Airport (AMD)",
+      "distance_km": 15.2
     },
-    {
-      "name": "Vastrapur",
-      "population": null,
-      "area_sqkm": null,
-      "safety_score": 9,
-      "traffic_score": 7,
-      "schools": 12,
-      "hospitals": 6,
-      "future_growth": "High",
-      "avg_price_per_sqft": 7000,
-      "nearest_airport": {
-        "name": "Sardar Vallabhbhai Patel International Airport (AMD)",
-        "distance_km": 14.1
-      },
-      "nearest_railway": {
-        "name": "Vastrapur Railway Station",
-        "distance_km": 1.7
-      },
-      "metro": {
-        "available": true,
-        "station": "Vastrapur",
-        "distance_km": 0.5
-      },
-      "police_station": {
-        "name": "Vastrapur Police Station",
-        "distance_km": 0.7
-      }
+    "nearest_railway": {
+      "name": "Ahmedabad Junction (ADI)",
+      "distance_km": 9.8
+    },
+    "metro": {
+      "available": true,
+      "station": "Shyamal Cross Road",
+      "distance_km": 2.3
+    },
+    "police_station": {
+      "name": "Satellite Police Station",
+      "distance_km": 1.4
     }
-  ]
-}
-
+  },
+  {
+    "location": "Vastrapur",
+    "population": null,
+    "area_sqkm": null,
+    "safety_score": 9,
+    "traffic_score": 7,
+    "schools": 12,
+    "hospitals": 6,
+    "future_growth": "High",
+    "avg_price_per_sqft": 7000,
+    "nearest_airport": {
+      "name": "Sardar Vallabhbhai Patel International Airport (AMD)",
+      "distance_km": 14.1
+    },
+    "nearest_railway": {
+      "name": "Vastrapur Railway Station",
+      "distance_km": 1.7
+    },
+    "metro": {
+      "available": true,
+      "station": "Vastrapur",
+      "distance_km": 0.5
+    },
+    "police_station": {
+      "name": "Vastrapur Police Station",
+      "distance_km": 0.7
+    }
+  },
+  {
+    "location": "Navrangpura",
+    "population": null,
+    "area_sqkm": null,
+    "safety_score": 7,
+    "traffic_score": 5,
+    "schools": 8,
+    "hospitals": 4,
+    "future_growth": "Medium",
+    "avg_price_per_sqft": 6000,
+    "nearest_airport": {
+      "name": "Sardar Vallabhbhai Patel International Airport (AMD)",
+      "distance_km": 13.5
+    },
+    "nearest_railway": {
+      "name": "Ahmedabad Junction (ADI)",
+      "distance_km": 7.3
+    },
+    "metro": {
+      "available": true,
+      "station": "Navrangpura",
+      "distance_km": 1.1
+    },
+    "police_station": {
+      "name": "Navrangpura Police Station",
+      "distance_km": 0.8
+    }
+  }
+]
