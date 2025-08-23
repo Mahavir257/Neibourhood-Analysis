@@ -1,278 +1,62 @@
-import logging
-import json
-import re
-import os
-from dotenv import load_dotenv
-import requests
-
-# Configure basic logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
-# Load environment variables
-load_dotenv()
-DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
-DEEPSEEK_URL = "https://api.deepseek.com/chat/completions"
-MODEL_NAME = "deepseek-chat"
-
-# Extended neighborhood data with new attributes
-NEIGHBORHOODS = {
-    'ahmedabad': [
-        {
-            'name': "Satellite",
-            'population': None,  # Population data not provided
-            'area_sqkm': None,
-            'safety_score': 8,
-            'traffic_score': 6,
-            'schools': 10,
-            'hospitals': 5,
-            'future_growth': "High",
-            'avg_price_per_sqft': 6500,
-            'nearest_airport': {"name": "Sardar Vallabhbhai Patel International Airport (AMD)", "distance_km": 15.2},
-            'nearest_railway': {"name": "Ahmedabad Junction (ADI)", "distance_km": 9.8},
-            'metro': {"available": True, "station": "Shyamal Cross Road", "distance_km": 2.3},
-            'police_station': {"name": "Satellite Police Station", "distance_km": 1.4}
-        },
-        {
-            'name': "Vastrapur",
-            'population': None,
-            'area_sqkm': None,
-            'safety_score': 9,
-            'traffic_score': 7,
-            'schools': 12,
-            'hospitals': 6,
-            'future_growth': "High",
-            'avg_price_per_sqft': 7000,
-            'nearest_airport': {"name": "Sardar Vallabhbhai Patel International Airport (AMD)", "distance_km": 14.1},
-            'nearest_railway': {"name": "Vastrapur Railway Station", "distance_km": 1.7},
-            'metro': {"available": True, "station": "Vastrapur", "distance_km": 0.5},
-            'police_station': {"name": "Vastrapur Police Station", "distance_km": 0.7}
-        },
-        # Add other neighborhoods similarly...
-    ]
+{
+  "city": "Ahmedabad",
+  "neighborhoods": [
+    {
+      "name": "Satellite",
+      "population": null,
+      "area_sqkm": null,
+      "safety_score": 8,
+      "traffic_score": 6,
+      "schools": 10,
+      "hospitals": 5,
+      "future_growth": "High",
+      "avg_price_per_sqft": 6500,
+      "nearest_airport": {
+        "name": "Sardar Vallabhbhai Patel International Airport (AMD)",
+        "distance_km": 15.2
+      },
+      "nearest_railway": {
+        "name": "Ahmedabad Junction (ADI)",
+        "distance_km": 9.8
+      },
+      "metro": {
+        "available": true,
+        "station": "Shyamal Cross Road",
+        "distance_km": 2.3
+      },
+      "police_station": {
+        "name": "Satellite Police Station",
+        "distance_km": 1.4
+      }
+    },
+    {
+      "name": "Vastrapur",
+      "population": null,
+      "area_sqkm": null,
+      "safety_score": 9,
+      "traffic_score": 7,
+      "schools": 12,
+      "hospitals": 6,
+      "future_growth": "High",
+      "avg_price_per_sqft": 7000,
+      "nearest_airport": {
+        "name": "Sardar Vallabhbhai Patel International Airport (AMD)",
+        "distance_km": 14.1
+      },
+      "nearest_railway": {
+        "name": "Vastrapur Railway Station",
+        "distance_km": 1.7
+      },
+      "metro": {
+        "available": true,
+        "station": "Vastrapur",
+        "distance_km": 0.5
+      },
+      "police_station": {
+        "name": "Vastrapur Police Station",
+        "distance_km": 0.7
+      }
+    }
+    // Add other neighborhoods here in the same structure
+  ]
 }
-
-def sanitize_input(text):
-    """
-    Sanitize input by removing extra whitespace and special characters.
-    Convert to lowercase for consistency.
-    
-    Args:
-        text (str): Input string to sanitize
-    
-    Returns:
-        str: Sanitized and lowercase string
-    """
-    if not isinstance(text, str):
-        return ""
-    text = re.sub(r'[^a-zA-Z0-9\s]', '', text)
-    return ' '.join(text.strip().split()).lower()
-
-def get_neighborhood_info(city, neighborhood):
-    """
-    Retrieve neighborhood information with case-insensitive matching.
-    
-    Args:
-        city (str): Name of the city (currently only 'ahmedabad' supported)
-        neighborhood (str): Name of the neighborhood
-    
-    Returns:
-        dict: Detailed information about the neighborhood or error message
-    """
-    if not isinstance(city, str) or not isinstance(neighborhood, str):
-        logging.error("Invalid input: city and neighborhood must be strings")
-        return {'error': 'Invalid input: city and neighborhood must be strings'}
-
-    city = sanitize_input(city)
-    neighborhood = sanitize_input(neighborhood)
-    
-    if not city or not neighborhood:
-        logging.error("Empty input after sanitization")
-        return {'error': 'City or neighborhood cannot be empty'}
-
-    try:
-        if city not in NEIGHBORHOODS:
-            logging.error(f"City {city} not found")
-            return {'error': f'City {city} not found'}
-
-        for nb in NEIGHBORHOODS[city]:
-            if nb['name'].lower() == neighborhood:
-                population_density = None
-                if nb.get('population') and nb.get('area_sqkm'):
-                    population_density = round(nb['population'] / nb['area_sqkm'], 2)
-                logging.info(f"Retrieved data for {nb['name']} in {city}")
-                return {
-                    'city': city.capitalize(),
-                    **nb,
-                    'population_density': population_density,
-                    'info': f'Data for {nb["name"]} in {city.capitalize()}'
-                }
-        
-        logging.error(f"Neighborhood {neighborhood} not found in {city}")
-        return {'error': f'Neighborhood {neighborhood} not found in {city}'}
-    except Exception as e:
-        logging.error(f"Error accessing data: {str(e)}")
-        return {'error': f'Internal error: {str(e)}'}
-
-def list_neighborhoods(city):
-    """
-    List all neighborhoods for a given city.
-    
-    Args:
-        city (str): Name of the city
-    
-    Returns:
-        dict: List of neighborhoods or error message
-    """
-    city = sanitize_input(city)
-    if not city:
-        logging.error("Empty city input after sanitization")
-        return {'error': 'City cannot be empty'}
-
-    try:
-        if city not in NEIGHBORHOODS:
-            logging.error(f"City {city} not found")
-            return {'error': f'City {city} not found'}
-        
-        return {
-            'city': city.capitalize(),
-            'neighborhoods': [nb['name'] for nb in NEIGHBORHOODS[city]]
-        }
-    except Exception as e:
-        logging.error(f"Error listing neighborhoods: {str(e)}")
-        return {'error': f'Internal error: {str(e)}'}
-
-def export_neighborhood_data(city, filename='neighborhood_data.json'):
-    """
-    Export neighborhood data for a city to a JSON file.
-    
-    Args:
-        city (str): Name of the city
-        filename (str): Name of the output JSON file
-    
-    Returns:
-        dict: Success or error message
-    """
-    city = sanitize_input(city)
-    if not city:
-        logging.error("Empty city input after sanitization")
-        return {'error': 'City cannot be empty'}
-
-    try:
-        if city not in NEIGHBORHOODS:
-            logging.error(f"City {city} not found")
-            return {'error': f'City {city} not found'}
-
-        data = []
-        for nb in NEIGHBORHOODS[city]:
-            population_density = None
-            if nb.get('population') and nb.get('area_sqkm'):
-                population_density = round(nb['population'] / nb['area_sqkm'], 2)
-            record = {
-                'name': nb['name'],
-                'population': nb.get('population'),
-                'area_sqkm': nb.get('area_sqkm'),
-                'population_density': population_density,
-                'safety_score': nb['safety_score'],
-                'traffic_score': nb['traffic_score'],
-                'schools': nb['schools'],
-                'hospitals': nb['hospitals'],
-                'future_growth': nb['future_growth'],
-                'avg_price_per_sqft': nb['avg_price_per_sqft'],
-                'nearest_airport': nb.get('nearest_airport'),
-                'nearest_railway': nb.get('nearest_railway'),
-                'metro': nb.get('metro'),
-                'police_station': nb.get('police_station')
-            }
-            data.append(record)
-
-        with open(filename, 'w') as f:
-            json.dump({'city': city.capitalize(), 'neighborhoods': data}, f, indent=4)
-        
-        logging.info(f"Data exported to {filename}")
-        return {'success': f'Data exported to {filename}'}
-    except Exception as e:
-        logging.error(f"Error exporting data: {str(e)}")
-        return {'error': f'Failed to export data: {str(e)}'}
-
-def build_prompt(location_info):
-    """
-    Build a prompt for DeepSeek API to generate a neighborhood scorecard with detailed amenities.
-    
-    Args:
-        location_info (dict): Dictionary with neighborhood data
-    
-    Returns:
-        str: Formatted prompt string for API consumption
-    """
-    required_keys = ['name', 'safety_score', 'traffic_score', 'schools', 'hospitals', 'future_growth', 'avg_price_per_sqft']
-    for key in required_keys:
-        if key not in location_info:
-            logging.error(f"Missing key in location_info: {key}")
-            raise ValueError(f"Missing key in location_info: {key}")
-
-    prompt = (
-        f"Generate a detailed neighborhood scorecard for {location_info['name']}:\n"
-        f"- Safety Score: {location_info['safety_score']} (out of 10)\n"
-        f"- Traffic Score: {location_info['traffic_score']} (out of 10)\n"
-        f"- Number of Schools: {location_info['schools']}\n"
-        f"- Number of Hospitals: {location_info['hospitals']}\n"
-        f"- Future Growth Potential: {location_info['future_growth']}\n"
-        f"- Average Price per Square Foot: ₹{location_info['avg_price_per_sqft']}\n"
-    )
-    
-    if location_info.get('nearest_airport'):
-        airport = location_info['nearest_airport']
-        prompt += f"- Nearest Airport: {airport['name']} ({airport['distance_km']} km away)\n"
-    if location_info.get('nearest_railway'):
-        railway = location_info['nearest_railway']
-        prompt += f"- Nearest Railway Station: {railway['name']} ({railway['distance_km']} km away)\n"
-    if location_info.get('metro') and location_info['metro'].get('available'):
-        metro = location_info['metro']
-        prompt += f"- Metro Station: {metro['station']} ({metro['distance_km']} km away)\n"
-    if location_info.get('police_station'):
-        police = location_info['police_station']
-        prompt += f"- Nearby Police Station: {police['name']} ({police['distance_km']} km away)\n"
-    
-    prompt += "Please provide actionable insights and a summary."
-    return prompt
-
-def get_deepseek_scorecard(location_info):
-    """
-    Call DeepSeek API with neighborhood data prompt and get the generated scorecard.
-    
-    Args:
-        location_info (dict): Dictionary with neighborhood data
-    
-    Returns:
-        dict: API response with generated scorecard or error
-    """
-    if not DEEPSEEK_API_KEY:
-        logging.error("DeepSeek API key not found in environment variables")
-        return {'error': 'DeepSeek API key missing'}
-    
-    prompt = build_prompt(location_info)
-    headers = {
-        "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
-        "Content-Type": "application/json"
-    }
-    
-    data = {
-        "model": MODEL_NAME,
-        "messages": [
-            {"role": "user", "content": prompt}
-        ]
-    }
-    
-    try:
-        response = requests.post(DEEPSEEK_URL, headers=headers, json=data)
-        response.raise_for_status()
-        result_json = response.json()
-        if 'choices' in result_json and len(result_json['choices']) > 0:
-            content = result_json['choices'][0]['message']['content']
-            return {'scorecard': content}
-        else:
-            logging.error("Unexpected response structure from DeepSeek API")
-            return {'error': 'Unexpected response format from DeepSeek API'}
-    except requests.exceptions.RequestException as e:
-        logging.error(f"DeepSeek API request failed: {str(e)}")
-        return {'error': f'DeepSeek API request failed: {str(e)}'}
